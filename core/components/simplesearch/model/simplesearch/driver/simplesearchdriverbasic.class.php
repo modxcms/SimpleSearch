@@ -159,14 +159,17 @@ class SimpleSearchDriverBasic extends SimpleSearchDriver {
             $idType = $this->modx->getOption('idType',$this->config,'parents');
             $depth = $this->modx->getOption('depth',$this->config,10);
             $ids = $this->processIds($ids,$idType,$depth);
+            if (!empty($exclude)) {
+                $exclude = $this->cleanIds($exclude);
+                $f = $this->modx->getSelectColumns('modResource','modResource','',array('id'));
+                /* no need to build 'NOT IN' array because we will remove these from the 'IN' array */
+                #$c->where(array("{$f}:NOT IN" => explode(',', $exclude)),xPDOQuery::SQL_AND,null,2);
+                $ids = array_diff($ids, explode(',', $exclude));
+            }
             $f = $this->modx->getSelectColumns('modResource','modResource','',array('id'));
             $c->where(array("{$f}:IN" => $ids),xPDOQuery::SQL_AND,null,$whereGroup);
         }
-        if (!empty($exclude)) {
-            $exclude = $this->cleanIds($exclude);
-            $f = $this->modx->getSelectColumns('modResource','modResource','',array('id'));
-            $c->where(array("{$f}:NOT IN" => explode(',', $exclude)),xPDOQuery::SQL_AND,null,2);
-        }
+        
     	$c->where(array('published:=' => 1), xPDOQuery::SQL_AND, null, $whereGroup);
     	$c->where(array('searchable:=' => 1), xPDOQuery::SQL_AND, null, $whereGroup);
     	$c->where(array('deleted:=' => 0), xPDOQuery::SQL_AND, null, $whereGroup);
