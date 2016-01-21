@@ -38,20 +38,30 @@ $search = new SimpleSearch($modx,$scriptProperties);
 $searchIndex = $modx->getOption('searchIndex',$scriptProperties,'search');
 $toPlaceholder = $modx->getOption('toPlaceholder',$scriptProperties,false);
 $noResultsTpl = $modx->getOption('noResultsTpl',$scriptProperties,'SearchNoResults');
+$debug = (bool)$modx->getOption('debug', $scriptProperties, false);
 
+$debug_output = '';
 /* get search string */
 if (empty($_REQUEST[$searchIndex])) {
     $output = $search->getChunk($noResultsTpl,array(
         'query' => '',
     ));
-    return $search->output($output,$toPlaceholder);
+
+    if ( $debug ) {
+        $debug_output .= '<br>No search in the URL request for searchIndex: '.$searchIndex;
+    }
+    return $debug_output.$search->output($output,$toPlaceholder);
 }
 $searchString = $search->parseSearchString($_REQUEST[$searchIndex]);
 if (!$searchString) {
     $output = $search->getChunk($noResultsTpl,array(
         'query' => $searchString,
     ));
-    return $search->output($output,$toPlaceholder);
+
+    if ( $debug ) {
+        $debug_output .= '<br>Search string was empty after parsing &amp; sanitizing for searchIndex: '.$searchIndex;
+    }
+    return $debug_output.$search->output($output,$toPlaceholder);
 }
 
 /* setup default properties */
@@ -85,9 +95,15 @@ $response = $search->getSearchResults($searchString,$scriptProperties);
 $placeholders = array('query' => $searchString);
 $resultsTpl = array('default' => array('results' => array(),'total' => $response['total']));
 if (!empty($response['results'])) {
+    if ( $debug ) {
+        $debug_output .= '<br>Begin iterate through search results';
+    }
     /* iterate through search results */
     foreach ($response['results'] as $resourceArray) {
         $resourceArray['idx'] = $idx;
+        if ( $debug ) {
+            $debug_output .= '<br>Search found resource ID: '.$resourceArray['id'];
+        }
         if (empty($resourceArray['link'])) {
             $ctx = !empty($resourceArray['context_key']) ? $resourceArray['context_key'] : $modx->context->get('key');
             $args = '';
@@ -113,10 +129,17 @@ if (!empty($response['results'])) {
         $resultsTpl['default']['results'][] = $search->getChunk($tpl,$resourceArray);
         $idx++;
     }
+} else {
+    if ( $debug ) {
+        $debug_output .= '<br>No search results for search term';
+    }
 }
 
 /* load postHooks to get faceted results */
 if (!empty($postHooks)) {
+    if ($debug) {
+        $debug_output .= '<br>Post hooks found';
+    }
     $limit = !empty($facetLimit) ? $facetLimit : $perPage;
     $search->loadHooks('post');
     $search->postHooks->loadMultiple($postHooks,$response['results'],array(
@@ -128,22 +151,39 @@ if (!empty($postHooks)) {
     ));
     if (!empty($search->postHooks->facets)) {
         foreach ($search->postHooks->facets as $facetKey => $facetResults) {
+
+            if ($debug) {
+                $debug_output .= '<br>Facet key: '.$facetKey;
+            }
             if (empty($resultsTpl[$facetKey])) {
                 $resultsTpl[$facetKey] = array();
                 $resultsTpl[$facetKey]['total'] = $facetResults['total'];
                 $resultsTpl[$facetKey]['results'] = array();
+                if ($debug) {
+                    $debug_output .= ' - results have not yet been added';
+                }
             } else {
-                $resultsTpl[$facetKey]['total'] = $resultsTpl[$facetKey]['total'] = $facetResults['total'];
+                $resultsTpl[$facetKey]['total'] = $facetResults['total'];
+                if ($debug) {
+                    $debug_output .= ' - results have already been added: '.$resultsTpl[$facetKey]['total'];
+                }
             }
 
             $idx = !empty($resultsTpl[$facetKey]) ? count($resultsTpl[$facetKey]['results'])+1 : 1;
             foreach ($facetResults['results'] as $r) {
+                if ($debug) {
+                    $debug_output .= '<br>'.$facetKey.' results # '.$idx;
+                }
                 $r['idx'] = $idx;
                 $fTpl = !empty($scriptProperties['tpl'.$facetKey]) ? $scriptProperties['tpl'.$facetKey] : $tpl;
                 $resultsTpl[$facetKey]['results'][] = $search->getChunk($fTpl,$r);
                 $idx++;
             }
         }
+    }
+} else {
+    if ($debug) {
+        $debug_output .= '<br>No post hooks found';
     }
 }
 
@@ -155,12 +195,21 @@ foreach ($resultsTpl as $facetKey => $facetResults) {
     $placeholders[$facetKey.'.total'] = !empty($facetResults['total']) ? $facetResults['total'] : 0;
     $placeholders[$facetKey.'.key'] = $facetKey;
 }
+if ($debug) {
+    $debug_output .= '<br>Active facet: '.$activeFacet;
+}
 $placeholders['results'] = $placeholders[$activeFacet.'.results']; /* set active facet results */
 $placeholders['total'] = !empty($resultsTpl[$activeFacet]['total']) ? $resultsTpl[$activeFacet]['total'] : 0;
 $placeholders['page'] = isset($_REQUEST[$offsetIndex]) ? ceil(intval($_REQUEST[$offsetIndex]) / $perPage) + 1 : 1;
 $placeholders['pageCount'] = !empty($resultsTpl[$activeFacet]['total']) ? ceil($resultsTpl[$activeFacet]['total'] / $perPage) : 1;
+if ($debug) {
+    $debug_output .= '<br>Active facet total: '.$placeholders['total'].' Page: '.$placeholders['page'].' Page count: '.$placeholders['page'];
+}
 
 if (!empty($response['results'])) {
+    if ($debug) {
+        $debug_output .= '<br>Results found for simple search, add highlighting and pagination';
+    }
     /* add results found message */
     $placeholders['resultInfo'] = $modx->lexicon('sisea.results_found',array(
         'count' => $placeholders['total'],
@@ -169,6 +218,10 @@ if (!empty($response['results'])) {
     /* if perPage set to >0, add paging */
     if ($perPage > 0) {
         $placeholders['paging'] = $search->getPagination($searchString,$perPage,$pagingSeparator,$placeholders['total']);
+    }
+} else {
+    if ($debug) {
+        $debug_output .= '<br> No Results found for simple search';
     }
 }
 $placeholders['query'] = $searchString;
@@ -182,7 +235,13 @@ if (empty($response['results'])) {
     $output = $search->getChunk($noResultsTpl,array(
         'query' => $searchString,
     ));
+    if ($debug) {
+        $debug_output .= '<br>No results send to: '.$noResultsTpl.' Chunk';
+    }
 } else {
+    if ($debug) {
+        $debug_output .= '<br>Results found send to: '.$containerTpl.' Chunk';
+    }
     $output = $search->getChunk($containerTpl,$placeholders);
 }
-return $search->output($output,$toPlaceholder);
+return $debug_output.$search->output($output,$toPlaceholder);
