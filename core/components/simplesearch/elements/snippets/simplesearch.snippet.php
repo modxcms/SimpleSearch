@@ -38,11 +38,13 @@ $search = new SimpleSearch($modx,$scriptProperties);
 $searchIndex = $modx->getOption('searchIndex',$scriptProperties,'search');
 $toPlaceholder = $modx->getOption('toPlaceholder',$scriptProperties,false);
 $noResultsTpl = $modx->getOption('noResultsTpl',$scriptProperties,'SearchNoResults');
+$noResultsTplOnEmptySearchKey = $modx->getOption('noResultsTplOnEmptySearchKey',$scriptProperties,true);
 $debug = (bool)$modx->getOption('debug', $scriptProperties, false);
 
 $debug_output = '';
 /* get search string */
 if (empty($_REQUEST[$searchIndex])) {
+    if (!$noResultsTplOnEmptySearchKey && !$debug) return '';
     $output = $search->getChunk($noResultsTpl,array(
         'query' => '',
     ));
@@ -54,6 +56,7 @@ if (empty($_REQUEST[$searchIndex])) {
 }
 $searchString = $search->parseSearchString($_REQUEST[$searchIndex]);
 if (!$searchString) {
+    if (!$noResultsTplOnEmptySearchKey && !$debug) return '';
     $output = $search->getChunk($noResultsTpl,array(
         'query' => $searchString,
     ));
