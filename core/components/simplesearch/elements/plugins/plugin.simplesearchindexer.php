@@ -71,7 +71,7 @@ switch ($modx->event->name) {
         $action = 'index';
         $resourceArray = $scriptProperties['resource']->toArray();
 
-        if ($resourceArray['published'] == 1 && $resourceArray['deleted'] == 0) {
+        if ($resourceArray['published'] == 1 && $resourceArray['deleted'] == 0 && $resourceArray['searchable'] == 1) {
             $action = 'index';
             foreach ($_POST as $k => $v) {
                 if (substr($k,0,2) == 'tv') {
