@@ -120,8 +120,14 @@ class SimpleSearchDriverBasic extends SimpleSearchDriver {
                 }
             } else {
                 $term = $wildcard.$this->searchString.$wildcard;
-                foreach ($docFields as $field) {$whereArray[] = array($field.':LIKE', $term,xPDOQuery::SQL_OR,$whereGroup);}
-                $whereArray[] = array('TemplateVarResources.value:LIKE', $term, xPDOQuery::SQL_OR, $whereGroup);
+                foreach ($docFields as $field) {
+                  $whereArray[] = array($field.':LIKE', $term, xPDOQuery::SQL_OR, $whereGroup);
+                }
+                
+                if ($includeTVs) {
+                  $whereArray[] = array('TemplateVarResources.value:LIKE', $term, xPDOQuery::SQL_OR, $whereGroup);
+                }
+
                 if (is_array($customPackages) && !empty($customPackages)) {
                     foreach ($customPackages as $package) {
                         $fields = explode(',',$package[1]);
