@@ -186,7 +186,8 @@ class SimpleSearchDriverBasic extends SimpleSearchDriver {
 
     	$c->where(array('published:=' => 1), xPDOQuery::SQL_AND, null, $whereGroup);
     	$c->where(array('searchable:=' => 1), xPDOQuery::SQL_AND, null, $whereGroup);
-    	$c->where(array('deleted:=' => 0), xPDOQuery::SQL_AND, null, $whereGroup);
+        $c->where(array('deleted:=' => 0), xPDOQuery::SQL_AND, null, $whereGroup);
+        $c->where(array('class_key:!=' => 'modWebLink'), xPDOQuery::SQL_AND, null, $whereGroup);
 
         /* restrict to either this context or specified contexts */
         $ctx = !empty($this->config['contexts']) ? $this->config['contexts'] : $this->modx->context->get('key');
