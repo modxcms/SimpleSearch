@@ -1,87 +1,145 @@
 <?php
 
 namespace Elastica;
+
+use Elastica\Exception\JSONParseException;
 use Elastica\Exception\NotFoundException;
 
 /**
- * Elastica Response object
+ * Elastica Response object.
  *
  * Stores query time, and result array -> is given to result set, returned by ...
  *
- * @category Xodoa
- * @package Elastica
  * @author Nicolas Ruflin <spam@ruflin.com>
  */
 class Response
 {
     /**
-     * Query time
+     * Query time.
      *
      * @var float Query time
      */
     protected $_queryTime = null;
 
     /**
-     * Response string (json)
+     * Response string (json).
      *
      * @var string Response
      */
     protected $_responseString = '';
 
     /**
-     * Error
+     * Error.
      *
-     * @var boolean Error
+     * @var bool Error
      */
     protected $_error = false;
 
     /**
-     * Transfer info
+     * Transfer info.
      *
      * @var array transfer info
      */
     protected $_transferInfo = array();
 
     /**
-     * Response
+     * Response.
      *
      * @var \Elastica\Response Response object
      */
     protected $_response = null;
 
     /**
-     * Construct
+     * HTTP response status code.
+     *
+     * @var int
+     */
+    protected $_status = null;
+
+    /**
+     * Whether or not to convert bigint results to string (see issue #717).
+     *
+     * @var bool
+     */
+    protected $_jsonBigintConversion = false;
+
+    /**
+     * Construct.
      *
      * @param string|array $responseString Response string (json)
+     * @param int          $responseStatus http status code
      */
-    public function __construct($responseString)
+    public function __construct($responseString, $responseStatus = null)
     {
         if (is_array($responseString)) {
             $this->_response = $responseString;
         } else {
             $this->_responseString = $responseString;
         }
+        $this->_status = $responseStatus;
     }
 
     /**
-     * Error message
+     * Error message.
      *
      * @return string Error message
      */
     public function getError()
     {
-        $message = '';
-        $response = $this->getData();
+        $error = $this->getFullError();
 
-        if (isset($response['error'])) {
-            $message = $response['error'];
+        if (!$error) {
+            return '';
+        }
+
+        if (is_string($error)) {
+            return $error;
+        }
+
+        if (isset($error['root_cause'][0])) {
+            $error = $error['root_cause'][0];
+        }
+
+        $message = $error['reason'];
+        if (isset($error['index'])) {
+            $message .= ' [index: '.$error['index'].']';
         }
 
         return $message;
     }
 
     /**
-     * True if response has error
+     * A keyed array representing any errors that occured.
+     *
+     * In case of http://localhost:9200/_alias/test the error is a string
+     *
+     * @return array|string Error data
+     */
+    public function getFullError()
+    {
+        $response = $this->getData();
+
+        if (isset($response['error'])) {
+            return $response['error'];
+        }
+    }
+
+    /**
+     * @return string Error string based on the error object
+     */
+    public function getErrorMessage()
+    {
+        $error = $this->getError();
+
+        if (!is_string($error)) {
+            $error = json_encode($error);
+        }
+
+        return $error;
+    }
+
+    /**
+     * True if response has error.
      *
      * @return bool True if response has error
      */
@@ -97,7 +155,23 @@ class Response
     }
 
     /**
-     * Checks if the query returned ok
+     * True if response has failed shards.
+     *
+     * @return bool True if response has failed shards
+     */
+    public function hasFailedShards()
+    {
+        try {
+            $shardsStatistics = $this->getShardsStatistics();
+        } catch (NotFoundException $e) {
+            return false;
+        }
+
+        return array_key_exists('failures', $shardsStatistics);
+    }
+
+    /**
+     * Checks if the query returned ok.
      *
      * @return bool True if ok
      */
@@ -106,21 +180,48 @@ class Response
         $data = $this->getData();
 
         // Bulk insert checks. Check every item
+        if (isset($data['status'])) {
+            if ($data['status'] >= 200 && $data['status'] <= 300) {
+                return true;
+            }
+
+            return false;
+        }
+
         if (isset($data['items'])) {
+            if (isset($data['errors']) && true === $data['errors']) {
+                return false;
+            }
+
             foreach ($data['items'] as $item) {
-                if (false == $item['index']['ok']) {
+                if (isset($item['index']['ok']) && false == $item['index']['ok']) {
                     return false;
-                 }
+                } elseif (isset($item['index']['status']) && ($item['index']['status'] < 200 || $item['index']['status'] >= 300)) {
+                    return false;
+                }
             }
 
             return true;
         }
 
-        return (isset($data['ok']) && $data['ok']);
+        if ($this->_status >= 200 && $this->_status <= 300) {
+            // http status is ok
+            return true;
+        }
+
+        return isset($data['ok']) && $data['ok'];
     }
 
     /**
-     * Response data array
+     * @return int
+     */
+    public function getStatus()
+    {
+        return $this->_status;
+    }
+
+    /**
+     * Response data array.
      *
      * @return array Response data array
      */
@@ -131,11 +232,14 @@ class Response
             if ($response === false) {
                 $this->_error = true;
             } else {
-
-                $tempResponse = json_decode($response, true);
-                // If error is returned, json_decode makes empty string of string
-                if (!empty($tempResponse)) {
-                    $response = $tempResponse;
+                try {
+                    if ($this->getJsonBigintConversion()) {
+                        $response = JSON::parse($response, true, 512, JSON_BIGINT_AS_STRING);
+                    } else {
+                        $response = JSON::parse($response);
+                    }
+                } catch (JSONParseException $e) {
+                    // leave response as is if parse fails
                 }
             }
 
@@ -167,17 +271,19 @@ class Response
      * Sets the transfer info of the curl request. This function is called
      * from the \Elastica\Client::_callService .
      *
-     * @param  array             $transferInfo The curl transfer information.
-     * @return \Elastica\Response Current object
+     * @param array $transferInfo The curl transfer information.
+     *
+     * @return $this
      */
     public function setTransferInfo(array $transferInfo)
     {
         $this->_transferInfo = $transferInfo;
+
         return $this;
     }
 
     /**
-     * This is only available if DEBUG constant is set to true
+     * Returns query execution time.
      *
      * @return float Query time
      */
@@ -187,10 +293,11 @@ class Response
     }
 
     /**
-     * Sets the query time
+     * Sets the query time.
      *
-     * @param  float             $queryTime Query time
-     * @return \Elastica\Response Current object
+     * @param float $queryTime Query time
+     *
+     * @return $this
      */
     public function setQueryTime($queryTime)
     {
@@ -200,26 +307,28 @@ class Response
     }
 
     /**
-     * Time request took
+     * Time request took.
      *
      * @throws \Elastica\Exception\NotFoundException
-     * @return int                                  Time request took
+     *
+     * @return int Time request took
      */
     public function getEngineTime()
     {
         $data = $this->getData();
 
         if (!isset($data['took'])) {
-            throw new NotFoundException("Unable to find the field [took]from the response");
+            throw new NotFoundException('Unable to find the field [took]from the response');
         }
 
         return $data['took'];
     }
 
     /**
-     * Get the _shard statistics for the response
+     * Get the _shard statistics for the response.
      *
      * @throws \Elastica\Exception\NotFoundException
+     *
      * @return array
      */
     public function getShardsStatistics()
@@ -227,16 +336,17 @@ class Response
         $data = $this->getData();
 
         if (!isset($data['_shards'])) {
-            throw new NotFoundException("Unable to find the field [_shards] from the response");
+            throw new NotFoundException('Unable to find the field [_shards] from the response');
         }
 
         return $data['_shards'];
     }
 
     /**
-     * Get the _scroll value for the response
+     * Get the _scroll value for the response.
      *
      * @throws \Elastica\Exception\NotFoundException
+     *
      * @return string
      */
     public function getScrollId()
@@ -244,9 +354,29 @@ class Response
         $data = $this->getData();
 
         if (!isset($data['_scroll_id'])) {
-            throw new NotFoundException("Unable to find the field [_scroll_id] from the response");
+            throw new NotFoundException('Unable to find the field [_scroll_id] from the response');
         }
 
         return $data['_scroll_id'];
+    }
+
+    /**
+     * Sets whether or not to apply bigint conversion on the JSON result.
+     *
+     * @param bool $jsonBigintConversion
+     */
+    public function setJsonBigintConversion($jsonBigintConversion)
+    {
+        $this->_jsonBigintConversion = $jsonBigintConversion;
+    }
+
+    /**
+     * Gets whether or not to apply bigint conversion on the JSON result.
+     *
+     * @return bool
+     */
+    public function getJsonBigintConversion()
+    {
+        return $this->_jsonBigintConversion;
     }
 }

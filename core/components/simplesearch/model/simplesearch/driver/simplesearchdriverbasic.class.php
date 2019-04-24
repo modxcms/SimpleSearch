@@ -169,24 +169,25 @@ class SimpleSearchDriverBasic extends SimpleSearchDriver {
                 'terms'=> $relevancyTerms
             ));
     	}
-    	if (!empty($ids)) {
-            $idType = $this->modx->getOption('idType',$this->config,'parents');
-            $depth = $this->modx->getOption('depth',$this->config,10);
-            $ids = $this->processIds($ids,$idType,$depth);
-            if (!empty($exclude)) {
-                $exclude = $this->cleanIds($exclude);
-                $f = $this->modx->getSelectColumns('modResource','modResource','',array('id'));
-                /* no need to build 'NOT IN' array because we will remove these from the 'IN' array */
-                #$c->where(array("{$f}:NOT IN" => explode(',', $exclude)),xPDOQuery::SQL_AND,null,2);
-                $ids = array_diff($ids, explode(',', $exclude));
-            }
-            $f = $this->modx->getSelectColumns('modResource','modResource','',array('id'));
-            $c->where(array("{$f}:IN" => $ids),xPDOQuery::SQL_AND,null,$whereGroup);
-        }
+      if (!empty($ids)) {
+        $idType = $this->modx->getOption('idType',$this->config,'parents');
+        $depth = $this->modx->getOption('depth',$this->config,10);
+        $ids = $this->processIds($ids,$idType,$depth);
+        $f = $this->modx->getSelectColumns('modResource','modResource','',array('id'));
+        $c->where(array("{$f}:IN" => $ids),xPDOQuery::SQL_AND,null,$whereGroup);
+      }
+      if (!empty($exclude)) {
+        $idType = $this->modx->getOption('idType',$this->config,'parents');
+        $depth = $this->modx->getOption('depth',$this->config,10);
+        $exclude = $this->processIds($exclude,$idType,$depth);
+        $f = $this->modx->getSelectColumns('modResource','modResource','',array('id'));
+        $c->where(array("{$f}:NOT IN" => $exclude),xPDOQuery::SQL_AND,null,$whereGroup);
+      }
 
     	$c->where(array('published:=' => 1), xPDOQuery::SQL_AND, null, $whereGroup);
     	$c->where(array('searchable:=' => 1), xPDOQuery::SQL_AND, null, $whereGroup);
-    	$c->where(array('deleted:=' => 0), xPDOQuery::SQL_AND, null, $whereGroup);
+        $c->where(array('deleted:=' => 0), xPDOQuery::SQL_AND, null, $whereGroup);
+        $c->where(array('class_key:!=' => 'modWebLink'), xPDOQuery::SQL_AND, null, $whereGroup);
 
         /* restrict to either this context or specified contexts */
         $ctx = !empty($this->config['contexts']) ? $this->config['contexts'] : $this->modx->context->get('key');

@@ -104,7 +104,21 @@ class SimpleSearchDriverElastic extends SimpleSearchDriver {
         $query->setFields($fields);
         $query->setQuery($string);
 
-        $customFilterScore = new \Elastica\Query\CustomFiltersScore();
+        $queryType = $this->modx->getOption('queryType', $scriptProperties, 'and');
+        switch($queryType) {
+            case 'phrase':
+                $query->setType('phrase');
+            break;
+            case 'and':
+            case 'or' :
+                $query->setOperator($queryType);
+            break;
+            default :
+                $query->setOperator('and');
+            break;
+        }
+
+        $customFilterScore = new \Elastica\Query\FunctionScore();
         $customFilterScore->setQuery($query);
 
         $searchBoosts = $this->modx->getOption('sisea.elastic.search_boost', null, '');
@@ -139,10 +153,10 @@ class SimpleSearchDriverElastic extends SimpleSearchDriver {
         }
 
         if (empty($boosts)) {
-            $customFilterScore->addFilter(new \Elastica\Filter\Term(array('type' => 'document')), 1);
+            $customFilterScore->addWeightFunction(1, new \Elastica\Filter\Term(array('type' => 'document')));
         } else {
             foreach ($boosts as $boost) {
-                $customFilterScore->addFilter(new \Elastica\Filter\Term(array($boost['field'] => $boost['value'])), $boost['boost']);
+                $customFilterScore->addWeightFunction($boost['boost'], new \Elastica\Filter\Term(array($boost['field'] => $boost['value'])));
             }
         }
 
@@ -161,61 +175,62 @@ class SimpleSearchDriverElastic extends SimpleSearchDriver {
             $elasticaQuery->setSize($perPage);
     	}
 
-        $elasticaFilterAnd = new \Elastica\Filter\BoolAnd();
+        $elasticaFilterAnd = new \Elastica\Query\BoolQuery();
 
         /* handle hidemenu option */
         $hideMenu = $this->modx->getOption('hideMenu',$scriptProperties,2);
         if ($hideMenu != 2) {
-            $elasticaFilterHideMenu  = new \Elastica\Filter\Term();
+            $elasticaFilterHideMenu  = new \Elastica\Query\Term();
             $elasticaFilterHideMenu->setTerm('hidemenu', ($hideMenu ? 1 : 0));
-            $elasticaFilterAnd->addFilter($elasticaFilterHideMenu);
+            $elasticaFilterAnd->addMust($elasticaFilterHideMenu);
         }
 
         /* handle contexts */
         $contexts = $this->modx->getOption('contexts',$scriptProperties,'');
         $contexts = !empty($contexts) ? $contexts : $this->modx->context->get('key');
         $contexts = explode(',',$contexts);
-        $elasticaFilterContext  = new \Elastica\Filter\Terms();
+        $elasticaFilterContext  = new \Elastica\Query\Terms();
         $elasticaFilterContext->setTerms('context_key', $contexts);
-        $elasticaFilterAnd->addFilter($elasticaFilterContext);
+        $elasticaFilterAnd->addMust($elasticaFilterContext);
 
         /* handle restrict search to these IDs */
         $ids = $this->modx->getOption('ids',$scriptProperties,'');
-    	if (!empty($ids)) {
+    	  if (!empty($ids)) {
             $idType = $this->modx->getOption('idType',$this->config,'parents');
             $depth = $this->modx->getOption('depth',$this->config,10);
             $ids = $this->processIds($ids,$idType,$depth);
-            $elasticaFilterId  = new \Elastica\Filter\Term();
-            $elasticaFilterId->setTerm('id', $ids);
-            $elasticaFilterAnd->addFilter($elasticaFilterId);
 
+            $elasticaFilterId  = new \Elastica\Query\Terms();
+            $elasticaFilterId->setTerms('id', $ids);
+            $elasticaFilterAnd->addMust($elasticaFilterId);
         }
 
         /* handle exclude IDs from search */
         $exclude = $this->modx->getOption('exclude',$scriptProperties,'');
         if (!empty($exclude)) {
-            $exclude = $this->cleanIds($exclude);
-            $exclude = explode(',', $exclude);
-            $elasticaFilterExcludeId  = new \Elastica\Filter\Term();
-            $elasticaFilterExcludeId->setTerm('id', $exclude);
-            $elasticaFilterNotId = new \Elastica\Filter\BoolNot($elasticaFilterExcludeId);
-            $elasticaFilterAnd->addFilter($elasticaFilterNotId);
+            $idType = $this->modx->getOption('idType',$this->config,'parents');
+            $depth = $this->modx->getOption('depth',$this->config,10);
+            $exclude = $this->processIds($exclude,$idType,$depth);
+
+            $elasticaFilterExcludeId  = new \Elastica\Query\Terms();
+            $elasticaFilterExcludeId->setTerms('id', $exclude);
+            $elasticaFilterAnd->addMustNot($elasticaFilterExcludeId);
         }
 
         /* basic always-on conditions */
-        $elasticaFilterPublished  = new \Elastica\Filter\Term();
+        $elasticaFilterPublished  = new \Elastica\Query\Term();
         $elasticaFilterPublished->setTerm('published', 1);
-        $elasticaFilterAnd->addFilter($elasticaFilterPublished);
+        $elasticaFilterAnd->addMust($elasticaFilterPublished);
 
-        $elasticaFilterSearchable  = new \Elastica\Filter\Term();
+        $elasticaFilterSearchable  = new \Elastica\Query\Term();
         $elasticaFilterSearchable->setTerm('searchable', 1);
-        $elasticaFilterAnd->addFilter($elasticaFilterSearchable);
+        $elasticaFilterAnd->addMust($elasticaFilterSearchable);
 
-        $elasticaFilterDeleted  = new \Elastica\Filter\Term();
+        $elasticaFilterDeleted  = new \Elastica\Query\Term();
         $elasticaFilterDeleted->setTerm('deleted', 0);
-        $elasticaFilterAnd->addFilter($elasticaFilterDeleted);
+        $elasticaFilterAnd->addMust($elasticaFilterDeleted);
 
-        $elasticaQuery->setFilter($elasticaFilterAnd);
+        $elasticaQuery->setPostFilter($elasticaFilterAnd);
 
         /* sorting */
         if (!empty($scriptProperties['sortBy'])) {
@@ -289,6 +304,9 @@ class SimpleSearchDriverElastic extends SimpleSearchDriver {
                 }
                 if($fieldName == 'id'){
                     $document->setId($value);
+                }
+                if($fieldName == 'content') {
+                    $value = strip_tags($value, '<p>,<h1>,<h2>,<h3>,<h4>,<em>,<strong>,<br>');
                 }
                 $document->set($fieldName,$value);
             }

@@ -3,44 +3,46 @@
 namespace Elastica\Transport;
 
 use Elastica\Exception\Connection\HttpException;
+use Elastica\Exception\PartialShardFailureException;
 use Elastica\Exception\ResponseException;
+use Elastica\JSON;
 use Elastica\Request;
 use Elastica\Response;
 
 /**
- * Elastica Http Transport object
+ * Elastica Http Transport object.
  *
- * @category Xodoa
- * @package Elastica
  * @author Nicolas Ruflin <spam@ruflin.com>
  */
 class Http extends AbstractTransport
 {
     /**
-     * Http scheme
+     * Http scheme.
      *
      * @var string Http scheme
      */
     protected $_scheme = 'http';
 
     /**
-     * Curl resource to reuse
+     * Curl resource to reuse.
      *
      * @var resource Curl resource to reuse
      */
     protected static $_curlConnection = null;
 
     /**
-     * Makes calls to the elasticsearch server
+     * Makes calls to the elasticsearch server.
      *
      * All calls that are made to the server are done through this function
      *
-     * @param  \Elastica\Request                     $request
-     * @param  array                                $params  Host, Port, ...
+     * @param \Elastica\Request $request
+     * @param array             $params  Host, Port, ...
+     *
      * @throws \Elastica\Exception\ConnectionException
      * @throws \Elastica\Exception\ResponseException
      * @throws \Elastica\Exception\Connection\HttpException
-     * @return \Elastica\Response                    Response object
+     *
+     * @return \Elastica\Response Response object
      */
     public function exec(Request $request, array $params)
     {
@@ -49,12 +51,12 @@ class Http extends AbstractTransport
         $conn = $this->_getConnection($connection->isPersistent());
 
         // If url is set, url is taken. Otherwise port, host and path
-        $url = $connection->hasConfig('url')?$connection->getConfig('url'):'';
+        $url = $connection->hasConfig('url') ? $connection->getConfig('url') : '';
 
         if (!empty($url)) {
             $baseUri = $url;
         } else {
-            $baseUri = $this->_scheme . '://' . $connection->getHost() . ':' . $connection->getPort() . '/' . $connection->getPath();
+            $baseUri = $this->_scheme.'://'.$connection->getHost().':'.$connection->getPort().'/'.$connection->getPath();
         }
 
         $baseUri .= $request->getPath();
@@ -62,26 +64,50 @@ class Http extends AbstractTransport
         $query = $request->getQuery();
 
         if (!empty($query)) {
-            $baseUri .= '?' . http_build_query($query);
+            $baseUri .= '?'.http_build_query($query);
         }
 
         curl_setopt($conn, CURLOPT_URL, $baseUri);
         curl_setopt($conn, CURLOPT_TIMEOUT, $connection->getTimeout());
         curl_setopt($conn, CURLOPT_FORBID_REUSE, 0);
 
+        // Tell ES that we support the compressed responses
+        // An "Accept-Encoding" header containing all supported encoding types is sent
+        // curl will decode the response automatically if the response is encoded
+        curl_setopt($conn, CURLOPT_ENCODING, '');
+
+        /* @see Connection::setConnectTimeout() */
+        $connectTimeout = $connection->getConnectTimeout();
+        if ($connectTimeout > 0) {
+            curl_setopt($conn, CURLOPT_CONNECTTIMEOUT, $connectTimeout);
+        }
+
         $proxy = $connection->getProxy();
+
+        // See: https://github.com/facebook/hhvm/issues/4875
+        if (is_null($proxy) && defined('HHVM_VERSION')) {
+            $proxy = getenv('http_proxy') ?: null;
+        }
+
         if (!is_null($proxy)) {
             curl_setopt($conn, CURLOPT_PROXY, $proxy);
         }
 
+        $username = $connection->getUsername();
+        $password = $connection->getPassword();
+        if (!is_null($username) and !is_null($password)) {
+            curl_setopt($conn, CURLOPT_HTTPAUTH, CURLAUTH_ANY);
+            curl_setopt($conn, CURLOPT_USERPWD, "$username:$password");
+        }
+
         $this->_setupCurl($conn);
 
-        $headersConfig = $connection->hasConfig('headers')?$connection->getConfig('headers'):array();
+        $headersConfig = $connection->hasConfig('headers') ? $connection->getConfig('headers') : array();
 
         if (!empty($headersConfig)) {
             $headers = array();
             while (list($header, $headerValue) = each($headersConfig)) {
-                array_push($headers, $header . ': ' . $headerValue);
+                array_push($headers, $header.': '.$headerValue);
             }
 
             curl_setopt($conn, CURLOPT_HTTPHEADER, $headers);
@@ -91,13 +117,13 @@ class Http extends AbstractTransport
         $data = $request->getData();
         $httpMethod = $request->getMethod();
 
-        if (isset($data) && !empty($data)) {
+        if (!empty($data) || '0' === $data) {
             if ($this->hasParam('postWithRequestBody') && $this->getParam('postWithRequestBody') == true) {
                 $httpMethod = Request::POST;
             }
 
             if (is_array($data)) {
-                $content = json_encode($data);
+                $content = JSON::stringify($data, 'JSON_ELASTICSEARCH');
             } else {
                 $content = $data;
             }
@@ -105,17 +131,22 @@ class Http extends AbstractTransport
             // Escaping of / not necessary. Causes problems in base64 encoding of files
             $content = str_replace('\/', '/', $content);
 
-            curl_setopt($conn, CURLOPT_POSTFIELDS, $content);
+            if ($connection->hasCompression()) {
+                // Compress the body of the request ...
+                curl_setopt($conn, CURLOPT_POSTFIELDS, gzencode($content));
+
+                // ... and tell ES that it is compressed
+                curl_setopt($conn, CURLOPT_HTTPHEADER, array('Content-Encoding: gzip'));
+            } else {
+                curl_setopt($conn, CURLOPT_POSTFIELDS, $content);
+            }
+        } else {
+            curl_setopt($conn, CURLOPT_POSTFIELDS, '');
         }
 
         curl_setopt($conn, CURLOPT_NOBODY, $httpMethod == 'HEAD');
 
         curl_setopt($conn, CURLOPT_CUSTOMREQUEST, $httpMethod);
-
-        if (defined('DEBUG') && DEBUG) {
-            // Track request headers when in debug mode
-            curl_setopt($conn, CURLINFO_HEADER_OUT, true);
-        }
 
         $start = microtime(true);
 
@@ -129,17 +160,19 @@ class Http extends AbstractTransport
         // Checks if error exists
         $errorNumber = curl_errno($conn);
 
-        $response = new Response($responseString);
-
-        if (defined('DEBUG') && DEBUG) {
-            $response->setQueryTime($end - $start);
-        }
-
+        $response = new Response($responseString, curl_getinfo($conn, CURLINFO_HTTP_CODE));
+        $response->setQueryTime($end - $start);
         $response->setTransferInfo(curl_getinfo($conn));
-
+        if ($connection->hasConfig('bigintConversion')) {
+            $response->setJsonBigintConversion($connection->getConfig('bigintConversion'));
+        }
 
         if ($response->hasError()) {
             throw new ResponseException($request, $response);
+        }
+
+        if ($response->hasFailedShards()) {
+            throw new PartialShardFailureException($request, $response);
         }
 
         if ($errorNumber > 0) {
@@ -150,7 +183,7 @@ class Http extends AbstractTransport
     }
 
     /**
-     * Called to add additional curl params
+     * Called to add additional curl params.
      *
      * @param resource $curlConnection Curl connection
      */
@@ -164,9 +197,10 @@ class Http extends AbstractTransport
     }
 
     /**
-     * Return Curl resource
+     * Return Curl resource.
      *
-     * @param  bool     $persistent False if not persistent connection
+     * @param bool $persistent False if not persistent connection
+     *
      * @return resource Connection resource
      */
     protected function _getConnection($persistent = true)

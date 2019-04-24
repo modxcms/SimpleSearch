@@ -2,60 +2,85 @@
 
 namespace Elastica\Filter;
 
+trigger_error('Deprecated: Filters are deprecated. Use queries in filter context. See https://www.elastic.co/guide/en/elasticsearch/reference/2.0/query-dsl-filters.html', E_USER_DEPRECATED);
+
 /**
- * Returns child documents having parent docs matching the query
+ * Returns child documents having parent docs matching the query.
  *
- * @category Xodoa
- * @package Elastica
- * @link http://www.elasticsearch.org/guide/reference/query-dsl/has-parent-filter.html
+ * @link https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-has-parent-filter.html
+ * @deprecated Filters are deprecated. Use queries in filter context. See https://www.elastic.co/guide/en/elasticsearch/reference/2.0/query-dsl-filters.html
  */
 class HasParent extends AbstractFilter
 {
     /**
-     * Construct HasParent filter
+     * Construct HasParent filter.
      *
-     * @param string|\Elastica\Query $query Query string or a Query object
-     * @param string                $type  Parent document type
+     * @param string|\Elastica\Query|\Elastica\Filter\AbstractFilter $query Query string or a Query object or a filter
+     * @param string|\Elastica\Type                                  $type  Parent document type
      */
     public function __construct($query, $type)
     {
-        $this->setQuery($query);
+        if ($query instanceof AbstractFilter) {
+            $this->setFilter($query);
+        } else {
+            $this->setQuery($query);
+        }
         $this->setType($type);
     }
 
     /**
-     * Sets query object
+     * Sets query object.
      *
-     * @param  string|\Elastica\Query|\Elastica\Query\AbstractQuery $query
-     * @return \Elastica\Filter\HasParent                    Current object
+     * @param string|\Elastica\Query|\Elastica\Query\AbstractQuery $query
+     *
+     * @return $this
      */
     public function setQuery($query)
     {
-        $query = \Elastica\Query::create($query);
-        $data = $query->toArray();
-
-        return $this->setParam('query', $data['query']);
+        return $this->setParam('query', \Elastica\Query::create($query));
     }
 
     /**
-     * Set type of the parent document
+     * Sets filter object.
      *
-     * @param  string                          $type Parent document type
-     * @return \Elastica\Filter\HasParent Current object
+     * @param \Elastica\Filter\AbstractFilter $filter
+     *
+     * @return $this
+     */
+    public function setFilter($filter)
+    {
+        return $this->setParam('filter', $filter);
+    }
+
+    /**
+     * Set type of the parent document.
+     *
+     * @param string|\Elastica\Type $type Parent document type
+     *
+     * @return $this
      */
     public function setType($type)
     {
-        return $this->setParam('type', $type);
+        if ($type instanceof \Elastica\Type) {
+            $type = $type->getName();
+        }
+
+        return $this->setParam('type', (string) $type);
     }
 
     /**
-     * Sets the scope
-     *
-     * @param  string                          $scope Scope
-     * @return \Elastica\Filter\HasParent Current object
+     * {@inheritdoc}
      */
-    public function setScope($scope)
+    public function toArray()
     {
-        return $this->setParam('_scope', $scope);
+        $array = parent::toArray();
+
+        $baseName = $this->_getBaseName();
+
+        if (isset($array[$baseName]['query'])) {
+            $array[$baseName]['query'] = $array[$baseName]['query']['query'];
+        }
+
+        return $array;
     }
 }

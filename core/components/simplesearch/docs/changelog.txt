@@ -1,5 +1,10 @@
 Changelog for SimpleSearch.
 
+- Added a new snippet property onlyFacet [#28]
+- Add basic debug option [#27]
+- Update Elastica [#33]
+- Update exclude parameter to always be active and to use idType [#33]
+
 SimpleSearch 1.9.2
 ========================================================================
 - Generate extract for whole search string, not just for last part

@@ -1,28 +1,26 @@
 <?php
 
 namespace Elastica\Cluster;
+
 use Elastica\Client;
 use Elastica\Request;
 
 /**
- * Cluster settings
+ * Cluster settings.
  *
- * @category Xodoa
- * @package  Elastica
  * @author   Nicolas Ruflin <spam@ruflin.com>
- * @link     http://www.elasticsearch.org/guide/reference/api/admin-cluster-update-settings.html
+ *
+ * @link     https://www.elastic.co/guide/en/elasticsearch/reference/current/cluster-update-settings.html
  */
 class Settings
 {
     /**
-     * Client
-     *
      * @var \Elastica\Client Client object
      */
     protected $_client = null;
 
     /**
-     * Creates a cluster object
+     * Creates a cluster object.
      *
      * @param \Elastica\Client $client Connection client object
      */
@@ -32,7 +30,7 @@ class Settings
     }
 
     /**
-     * Returns settings data
+     * Returns settings data.
      *
      * @return array Settings data (persistent and transient)
      */
@@ -42,11 +40,12 @@ class Settings
     }
 
     /**
-     * Returns the current persistent settings of the cluster
+     * Returns the current persistent settings of the cluster.
      *
      * If param is set, only specified setting is return.
      *
-     * @param  string            $setting OPTIONAL Setting name to return
+     * @param string $setting OPTIONAL Setting name to return
+     *
      * @return array|string|null Settings data
      */
     public function getPersistent($setting = '')
@@ -55,10 +54,10 @@ class Settings
         $settings = $data['persistent'];
 
         if (!empty($setting)) {
-            if (isset($settings[ $setting])) {
+            if (isset($settings[$setting])) {
                 return $settings[$setting];
             } else {
-                return null;
+                return;
             }
         }
 
@@ -66,11 +65,12 @@ class Settings
     }
 
     /**
-     * Returns the current transient settings of the cluster
+     * Returns the current transient settings of the cluster.
      *
      * If param is set, only specified setting is return.
      *
-     * @param  string            $setting OPTIONAL Setting name to return
+     * @param string $setting OPTIONAL Setting name to return
+     *
      * @return array|string|null Settings data
      */
     public function getTransient($setting = '')
@@ -79,10 +79,24 @@ class Settings
         $settings = $data['transient'];
 
         if (!empty($setting)) {
-            if (isset($settings[ $setting])) {
+            if (isset($settings[$setting])) {
                 return $settings[$setting];
             } else {
-                return null;
+                if (strpos($setting, '.') !== false) {
+                    // convert dot notation to nested arrays
+                    $keys = explode('.', $setting);
+                    foreach ($keys as $key) {
+                        if (isset($settings[$key])) {
+                            $settings = $settings[$key];
+                        } else {
+                            return;
+                        }
+                    }
+
+                    return $settings;
+                }
+
+                return;
             }
         }
 
@@ -90,10 +104,11 @@ class Settings
     }
 
     /**
-     * Sets persistent setting
+     * Sets persistent setting.
      *
-     * @param  string            $key
-     * @param  string            $value
+     * @param string $key
+     * @param string $value
+     *
      * @return \Elastica\Response
      */
     public function setPersistent($key, $value)
@@ -101,17 +116,18 @@ class Settings
         return $this->set(
             array(
                 'persistent' => array(
-                    $key => $value
-                )
+                    $key => $value,
+                ),
             )
         );
     }
 
     /**
-     * Sets transient settings
+     * Sets transient settings.
      *
-     * @param  string            $key
-     * @param  string            $value
+     * @param string $key
+     * @param string $value
+     *
      * @return \Elastica\Response
      */
     public function setTransient($key, $value)
@@ -119,19 +135,20 @@ class Settings
         return $this->set(
             array(
                 'transient' => array(
-                    $key => $value
-                )
+                    $key => $value,
+                ),
             )
         );
     }
 
     /**
-     * Sets the cluster to read only
+     * Sets the cluster to read only.
      *
      * Second param can be used to set it persistent
      *
-     * @param  bool              $readOnly
-     * @param  bool              $persistent
+     * @param bool $readOnly
+     * @param bool $persistent
+     *
      * @return \Elastica\Response $response
      */
     public function setReadOnly($readOnly = true, $persistent = false)
@@ -148,9 +165,10 @@ class Settings
     }
 
     /**
-     * Set settings for cluster
+     * Set settings for cluster.
      *
-     * @param  array             $settings Raw settings (including persistent or transient)
+     * @param array $settings Raw settings (including persistent or transient)
+     *
      * @return \Elastica\Response
      */
     public function set(array $settings)
@@ -159,7 +177,7 @@ class Settings
     }
 
     /**
-     * Get the client
+     * Get the client.
      *
      * @return \Elastica\Client
      */
@@ -169,10 +187,11 @@ class Settings
     }
 
     /**
-     * Sends settings request
+     * Sends settings request.
      *
-     * @param  array             $data   OPTIONAL Data array
-     * @param  string            $method OPTIONAL Transfer method (default = \Elastica\Request::GET)
+     * @param array  $data   OPTIONAL Data array
+     * @param string $method OPTIONAL Transfer method (default = \Elastica\Request::GET)
+     *
      * @return \Elastica\Response Response object
      */
     public function request(array $data = array(), $method = Request::GET)

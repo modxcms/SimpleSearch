@@ -3,61 +3,128 @@
 namespace Elastica\Suggest;
 
 /**
- * Text query
+ * Class Term.
  *
- * @category Xodoa
- * @package Elastica
- * @author Imanol Cea <imanol.cea@gmail.com>
- * @link http://www.elasticsearch.org/guide/reference/api/search/term-suggest/
+ * @link https://www.elastic.co/guide/en/elasticsearch/reference/current/search-suggesters-term.html
  */
 class Term extends AbstractSuggest
 {
-	 /**
-     * Global text
-     *
-     * @var string Global text
-     */
-    protected $_globalText;
+    const SORT_SCORE = 'score';
+    const SORT_FREQUENCY = 'frequency';
+
+    const SUGGEST_MODE_MISSING = 'missing';
+    const SUGGEST_MODE_POPULAR = 'popular';
+    const SUGGEST_MODE_ALWAYS = 'always';
 
     /**
-     * Options
+     * @param string $analyzer
      *
-     * @var array parameters
+     * @return $this
      */
-    protected $_parameters = array();
-
-    public function toArray()
+    public function setAnalyzer($analyzer)
     {
-        return $this->_params;
+        return $this->setParam('analyzer', $analyzer);
     }
-
-    public function addTerm($name, Array $term) {
-
-        $this->addParam($name, $term);
-    }
-
-    public function setGlobalText($text) {
-        $this->_globalText = $text;
-    }
-
 
     /**
-     * Adds a param to the list
+     * @param string $sort see SORT_* constants for options
      *
-     * This function can be used to add an array of params
-     *
-     * @param  string         $key   Param key
-     * @param  mixed          $value Value to set
-     * @return \Elastica\Param
+     * @return $this
      */
-    public function addParam($key, $value)
+    public function setSort($sort)
     {
-        if (!isset($this->_params[$key])) {
-            $this->_params[$key] = array();
-        }
+        return $this->setParam('sort', $sort);
+    }
 
-        $this->_params[$key] = $value;
+    /**
+     * @param string $mode see SUGGEST_MODE_* constants for options
+     *
+     * @return $this
+     */
+    public function setSuggestMode($mode)
+    {
+        return $this->setParam('suggest_mode', $mode);
+    }
 
-        return $this;
+    /**
+     * If true, suggest terms will be lower cased after text analysis.
+     *
+     * @param bool $lowercase
+     *
+     * @return $this
+     */
+    public function setLowercaseTerms($lowercase = true)
+    {
+        return $this->setParam('lowercase_terms', (bool) $lowercase);
+    }
+
+    /**
+     * Set the maximum edit distance candidate suggestions can have in order to be considered as a suggestion.
+     *
+     * @param int $max Either 1 or 2. Any other value will result in an error.
+     *
+     * @return $this
+     */
+    public function setMaxEdits($max)
+    {
+        return $this->setParam('max_edits', (int) $max);
+    }
+
+    /**
+     * The number of minimum prefix characters that must match in order to be a suggestion candidate.
+     *
+     * @param int $length Defaults to 1.
+     *
+     * @return $this
+     */
+    public function setPrefixLength($length)
+    {
+        return $this->setParam('prefix_len', (int) $length);
+    }
+
+    /**
+     * The minimum length a suggest text term must have in order to be included.
+     *
+     * @param int $length Defaults to 4.
+     *
+     * @return $this
+     */
+    public function setMinWordLength($length)
+    {
+        return $this->setParam('min_word_len', (int) $length);
+    }
+
+    /**
+     * @param int $max Defaults to 5.
+     *
+     * @return $this
+     */
+    public function setMaxInspections($max)
+    {
+        return $this->setParam('max_inspections', $max);
+    }
+
+    /**
+     * Set the minimum number of documents in which a suggestion should appear.
+     *
+     * @param int|float $min Defaults to 0. If the value is greater than 1, it must be a whole number.
+     *
+     * @return $this
+     */
+    public function setMinDocFrequency($min)
+    {
+        return $this->setParam('min_doc_freq', $min);
+    }
+
+    /**
+     * Set the maximum number of documents in which a suggest text token can exist in order to be included.
+     *
+     * @param float $max
+     *
+     * @return $this
+     */
+    public function setMaxTermFrequency($max)
+    {
+        return $this->setParam('max_term_freq', $max);
     }
 }
