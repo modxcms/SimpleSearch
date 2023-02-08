@@ -1,54 +1,41 @@
 <?php
+
 namespace SimpleSearch;
 
 use MODX\Revolution\modX;
 use MODX\Revolution\modChunk;
+use MODX\Revolution\Services\ContainerException;
 use SimpleSearch\Driver\SimpleSearchDriver;
+use SimpleSearch\Driver\SimpleSearchDriverBasic;
 
-/**
- * The base class for SimpleSearch
- *
- * @package
- */
 class SimpleSearch
 {
-    /** @var modX $modx */
     public modX $modx;
-    /** @var array $config */
-    public array $config = array();
-    /** @var string $searchString */
+    public array $config = [];
     public string $searchString = '';
-    /** @var array $searchArray */
-    public array $searchArray = array();
-    /** @var int $searchResultsCount */
+    public array $searchArray = [];
     public int $searchResultsCount = 0;
-    /* @var string $ids */
     public string $ids = '';
-    /** @var array $docs */
-    public array $docs = array();
-    /** @var array $chunks */
-    public array $chunks = array();
-    /** @var SimpleSearchDriver $driver */
+    public array $docs = [];
+    public array $chunks = [];
     public SimpleSearchDriver $driver;
-    /** @var SiHooks $postHooks */
     public SiHooks $postHooks;
-    /** @var array $response */
-    public array $response = array();
+    public array $response = [];
 
-    public function __construct(modX $modx, array $config = array())
+    public function __construct(modX $modx, array $config = [])
     {
-        $this->modx =& $modx;
+        $this->modx = $modx;
         $corePath   = $this->modx->getOption('simplesearch.core_path', null, $this->modx->getOption('core_path') . 'components/simplesearch/');
         $assetsUrl  = $this->modx->getOption('simplesearch.assets_url', null, $this->modx->getOption('assets_url') . 'components/simplesearch/');
 
-        $this->config = array_merge(array(
+        $this->config = array_merge([
             'corePath'        => $corePath,
             'chunksPath'      => $corePath.'elements/chunks/',
             'snippetsPath'    => $corePath.'elements/snippets/',
             'srcPath'         => $corePath . 'src/',
             'processors_path' => $corePath . '/src/Processors/',
             'assetsUrl'       => $assetsUrl,
-        ), $config);
+        ], $config);
 
         $this->modx->lexicon->load('simplesearch:default');
     }
@@ -62,24 +49,29 @@ class SimpleSearch
      * @param array $properties The properties for the Chunk
      * @return string The processed content of the Chunk
      */
-    public function getChunk($name, $properties = array())
+    public function getChunk(string $name, array $properties = []): string
     {
-        if (class_exists('pdoTools') && $pdo = $this->modx->getService('pdoTools')) {
-            return $pdo->getChunk($name, $properties);
+        try {
+            if ($pdo = $this->modx->services->get('pdotools')) {
+                return $pdo->getChunk($name, $properties);
+            }
+        } catch (ContainerException $e) {
+            if (class_exists('pdoTools') && $pdo = $this->modx->getService('pdoTools')) {
+                return $pdo->getChunk($name, $properties);
+            }
         }
 
-        $chunk = null;
         if (!isset($this->chunks[$name])) {
             $chunk = $this->getTplChunk($name);
-            if (empty($chunk)) {
-                $chunk = $this->modx->getObject(modChunk::class, array('name' => $name), true);
+            if ($chunk === null) {
+                $chunk = $this->modx->getObject(modChunk::class, ['name' => $name]);
                 if ($chunk === false) {
                     return false;
                 }
             }
             $this->chunks[$name] = $chunk->getContent();
         } else {
-            $o     = $this->chunks[$name];
+            $o = $this->chunks[$name];
             $chunk = $this->modx->newObject(modChunk::class);
             $chunk->setContent($o);
         }
@@ -94,26 +86,24 @@ class SimpleSearch
      *
      * @access private
      * @param string $name The name of the Chunk. Will parse to name.chunk.tpl
-     * @param string $postFix The postfix to append to the name
-     * @return object /boolean Returns the modChunk object if found, otherwise
+     * @return null|modChunk Returns the modChunk object if found, otherwise
      * false.
      */
-    private function getTplChunk(string $name, string $postFix = '.chunk.tpl')
+    private function getTplChunk(string $name): ?modChunk
     {
         $chunk = null;
-        if (file_exists($name)) {
-            $f = $name;
-        } else {
-            $f = $this->config['chunksPath'].strtolower($name).$postFix;
-        }
+        $f = file_exists($name)
+            ? $name
+            : $this->config['chunksPath'] . strtolower($name) . '.chunk.tpl';
 
         if (file_exists($f)) {
-            $o     = file_get_contents($f);
+            $o = file_get_contents($f);
             $chunk = $this->modx->newObject(modChunk::class);
 
             $chunk->set('name', $name);
             $chunk->setContent($o);
         }
+
         return $chunk;
     }
 
@@ -123,9 +113,9 @@ class SimpleSearch
      * @param array $scriptProperties
      * @return false
      */
-    public function loadDriver(array $scriptProperties = array()): bool
+    public function loadDriver(array $scriptProperties = []): bool
     {
-        $driverClass     = $this->modx->getOption('simplesearch.driver_class', $scriptProperties, '\\SimpleSearch\\Driver\\SimpleSearchDriverBasic');
+        $driverClass = $this->modx->getOption('simplesearch.driver_class', $scriptProperties, SimpleSearchDriverBasic::class, true);
 
         if (!class_exists($driverClass)) {
             $this->modx->log(modX::LOG_LEVEL_ERROR, 'Could not load driver class: '.$driverClass);
@@ -143,24 +133,24 @@ class SimpleSearch
      * @param string $str The string to parse.
      * @return string The parsed and cleansed string.
      */
-    public function parseSearchString($str = '')
+    public function parseSearchString(string $str = ''): string
     {
         $minChars = $this->modx->getOption('minChars', $this->config, 4);
 
         $this->searchArray = explode(' ', $str);
-        $this->searchArray = $this->modx->sanitize($this->searchArray, $this->modx->sanitizePatterns);
+        $this->searchArray = $this->modx::sanitize($this->searchArray, $this->modx->sanitizePatterns);
 
-        $reserved = array('AND', 'OR', 'IN', 'NOT');
+        $reserved = ['AND', 'OR', 'IN', 'NOT'];
         foreach ($this->searchArray as $key => $term) {
             $this->searchArray[$key] = strip_tags($term);
-            if (strlen($term) < $minChars && !in_array($term, $reserved)) {
+            if (strlen($term) < $minChars && !in_array($term, $reserved, true)) {
                 unset($this->searchArray[$key]);
             }
         }
 
         $this->searchString = implode(' ', $this->searchArray);
         /* One last pass to filter for modx tags. */
-        $this->searchString = str_replace(array('[[', ']]'), array('&#91;&#91;', '&#93;&#93;'), $this->searchString);
+        $this->searchString = str_replace(['[[', ']]'], ['&#91;&#91;', '&#93;&#93;'], $this->searchString);
 
         return $this->searchString;
     }
@@ -172,7 +162,7 @@ class SimpleSearch
      * @param array $scriptProperties
      * @return array An array of modResource results of the search.
      */
-    public function getSearchResults(string $str = '', array $scriptProperties = array()): array
+    public function getSearchResults(string $str = '', array $scriptProperties = []): array
     {
         if (!empty($str)) {
             $this->searchString = strip_tags($this->modx->sanitizeString($str));
@@ -192,12 +182,13 @@ class SimpleSearch
      * Generates the pagination links
      *
      * @param string $searchString The string of the search
-     * @param integer $perPage The number of items per page
+     * @param int $perPage The number of items per page
      * @param string $separator The separator to use between pagination links
      * @param bool|int $total The total of records. Will default to the main count if not passed
      * @return string Pagination links.
+     * @noinspection SlowArrayOperationsInLoopInspection
      */
-    public function getPagination(string $searchString = '', int $perPage = 10, string $separator = ' | ', int $total): string
+    public function getPagination(string $searchString = '', int $perPage = 10, string $separator = ' | ', int $total = 0): string
     {
         if (empty($total)) {
             $total = $this->response['total'];
@@ -216,11 +207,11 @@ class SimpleSearch
         if (empty($searchString)) {
             $searchString = $this->searchString;
         } else {
-            $searchString = isset($_REQUEST[$searchIndex]) ? $_REQUEST[$searchIndex] : '';
+            $searchString = isset($_REQUEST[$searchIndex]) ? (string)$_REQUEST[$searchIndex] : '';
         }
 
         $pageLinkCount = ceil($total / $perPage);
-        $pageArray     = array();
+        $pageArray     = [];
         $id            = $this->modx->resource->get('id');
         $pageLimit     = $this->modx->getOption('pageLimit', $this->config, 0);
         $pageFirstTpl  = $this->modx->getOption('pageFirstTpl', $this->config, $pageTpl);
@@ -232,15 +223,15 @@ class SimpleSearch
             $pageArray['separator'] = $separator;
             $pageArray['offset']    = $i * $perPage;
 
-            $currentOffset = intval($this->modx->getOption($searchOffset, $_GET, 0));
+            $currentOffset = (int)$this->modx->getOption($searchOffset, $_GET, 0);
             if (!empty($pageFirstTpl) && $pageLimit > 0 && $i + 1 === 1 && (int)$pageArray['offset'] !== $currentOffset) {
                 $parameters = $this->modx->request->getParameters();
                 $parameters = array_merge(
                     $parameters,
-                    array(
+                    [
                         $searchOffset => $pageArray['offset'],
                         $searchIndex  => $searchString
-                    )
+                    ]
                 );
 
                 $pageArray['text'] = 'First';
@@ -251,10 +242,10 @@ class SimpleSearch
                     $parameters = $this->modx->request->getParameters();
                     $parameters = array_merge(
                         $parameters,
-                        array(
+                        [
                             $searchOffset => $currentOffset - $perPage,
                             $searchIndex  => $searchString,
-                        )
+                        ]
                     );
 
                     $pageArray['text'] = '&lt;&lt;';
@@ -273,10 +264,10 @@ class SimpleSearch
                     $parameters = $this->modx->request->getParameters();
                     $parameters = array_merge(
                         $parameters,
-                        array(
+                        [
                             $searchOffset => $pageArray['offset'],
                             $searchIndex  => $searchString
-                        )
+                        ]
                     );
 
                     $pageArray['text'] = $i + 1;
@@ -289,10 +280,10 @@ class SimpleSearch
                     $parameters = $this->modx->request->getParameters();
                     $parameters = array_merge(
                         $parameters,
-                        array(
+                        [
                             $searchOffset => $currentOffset + $perPage,
                             $searchIndex  => $searchString,
-                        )
+                        ]
                     );
 
                     $pageArray['text'] = '&gt;&gt;';
@@ -304,10 +295,10 @@ class SimpleSearch
                 $parameters = $this->modx->request->getParameters();
                 $parameters = array_merge(
                     $parameters,
-                    array(
+                    [
                         $searchOffset => $pageArray['offset'],
                         $searchIndex  => $searchString,
-                    )
+                    ]
                 );
 
                 $pageArray['text'] = 'Last';
@@ -316,9 +307,7 @@ class SimpleSearch
                 $pagination .= $this->getChunk($pageLastTpl, $pageArray);
             }
 
-            if ($i < $pageLinkCount) {
-                $pagination .= $separator;
-            }
+            $pagination .= $separator;
         }
 
         return trim($pagination, $separator);
@@ -330,12 +319,12 @@ class SimpleSearch
      * @param string $text The text to sanitize
      * @return string The sanitized text
      */
-    public function sanitize($text)
+    public function sanitize(string $text): string
     {
         $text = strip_tags($text);
-        $text = preg_replace('/(\[\[\+.*?\]\])/i', '', $text);
+        $text = preg_replace('/(\[\[\+.*?]])/', '', $text);
 
-        return $this->modx->stripTags($text);
+        return $this->modx->stripTags($text) ?: '';
     }
 
     /**
@@ -347,7 +336,7 @@ class SimpleSearch
      * @param string $ellipsis The ellipsis to use to wrap around the extract.
      * @return string The generated extract.
      */
-    public function createExtract($text, $length = 200, $search = '', $ellipsis = '...')
+    public function createExtract(string $text, int $length = 200, string $search = '', string $ellipsis = '...'): string
     {
         $text = trim(preg_replace('/\s+/u', ' ', $this->sanitize($text)));
         if (empty($text)) {
@@ -369,9 +358,9 @@ class SimpleSearch
             }
             if ($pos) {
                 return rtrim($useMb ? mb_substr($text, 0, $pos, $encoding) : substr($text, 0, $pos), $trimChars) . $ellipsis;
-            } else {
-                return $text;
             }
+
+            return $text;
         }
 
         if ($useMb) {
@@ -476,7 +465,7 @@ class SimpleSearch
      * Either return a value or set to placeholder, depending on setting
      *
      * @param string $output
-     * @param boolean $toPlaceholder
+     * @param bool $toPlaceholder
      * @return string
      */
     public function output(string $output = '', bool $toPlaceholder = false): string
@@ -497,14 +486,14 @@ class SimpleSearch
      * @param string $type The type of hook to load.
      * @param array $config An array of configuration parameters for the
      * hooks class
-     * @return false An instance of the SiHooks class.
+     * @return null|SiHooks An instance of the SiHooks class.
      */
-    public function loadHooks(string $type = 'post', array $config = array())
+    public function loadHooks(string $type = 'post', array $config = []): ?SiHooks
     {
         if (!$this->modx->loadClass(SiHooks::class, $this->config['modelPath'], true, true)) {
             $this->modx->log(modX::LOG_LEVEL_ERROR, '[SimpleSearch] Could not load Hooks class.');
 
-            return false;
+            return null;
         }
         $type .= 'Hooks';
 

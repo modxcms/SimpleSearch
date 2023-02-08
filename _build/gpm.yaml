@@ -5,7 +5,7 @@ description: >-
   Evolution (minus the ajax). Only searches Resources; does not search dynamic
   content.
 author: modxcms
-version: 3.0.0-alpha
+version: 3.0.0-beta
 chunks:
   - name: SearchForm
     file: searchform.chunk.tpl
@@ -289,7 +289,7 @@ snippets:
         lexicon: simplesearch:properties
 systemSettings:
   - key: driver_class
-    value: \SimpleSearch\Driver\SimpleSearchDriverBasic
+    value: ''
     area: Drivers
   - key: autosuggest_tv
     value: simpleSearchAutoSuggestions
