@@ -295,6 +295,6 @@ systemSettings:
     value: simpleSearchAutoSuggestions
     area: Autosuggest
 build:
-  - scriptsAfter: [resolve.fixsystemsettings.php]
-  - requires:
-      - modx: '>=3.0.0-alpha'
+  scriptsAfter: [resolve.fixsystemsettings.php]
+  requires:
+      modx: '>=3.0.0-alpha'
