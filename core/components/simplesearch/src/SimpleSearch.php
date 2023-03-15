@@ -453,12 +453,12 @@ class SimpleSearch
     public function addHighlighting(string $string, string $cls = 'simplesearch-highlight', string $tag = 'span'): string
     {
         $searchStrings = explode(' ', $this->searchString);
+        $replacement = '<'.$tag.' class="'.$cls.'">$0</'.$tag.'>';
+        $searchParts = [];
         foreach ($searchStrings as $searchString) {
-            $quoteValue = preg_quote($searchString, '/');
-            $string     = preg_replace('/' . $quoteValue . '/i', '<'.$tag.' class="'.$cls.'">$0</'.$tag.'>', $string);
+            $searchParts[] = '(' . preg_quote($searchString, '/') . ')';
         }
-
-        return $string;
+        return preg_replace('/' . implode('|', $searchParts) . '/i', $replacement, $string);
     }
 
     /**
