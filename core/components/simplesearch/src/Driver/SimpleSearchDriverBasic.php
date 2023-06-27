@@ -97,8 +97,14 @@ class SimpleSearchDriverBasic extends SimpleSearchDriver
                     if (!empty($package[4])) {
                         $package[3] = str_replace($searchArray, $replacePaths, $package[3]);
 
-                        $this->modx->addPackage($package[2], $package[3]);
-                        $c->leftJoin($package[0], $package[0], $package[4]);
+                        $className = $package[0];
+                        $classAlias = $this->modx->getAlias($className);
+
+                        if (!class_exists($className)){
+                            $this->modx->addPackage($package[2], $package[3]);
+                        }
+
+                        $c->leftJoin($className, $classAlias, $package[4]);
 
                         $customPackages[] = $package;
                     }
@@ -107,88 +113,67 @@ class SimpleSearchDriverBasic extends SimpleSearchDriver
         }
 
         /* Process conditional clauses */
-        $whereGroup = 1;
         if ($searchStyle === 'partial' || $this->modx->config['dbtype'] === 'sqlsrv') {
             $wildcard   = $matchWildcard ? '%' : '';
-            $whereArray = array();
+            $whereArray = [];
+            $i = 1;
+
+            $searchTerms = [ $this->searchString ];
             if (empty($useAllWords)) {
-                $i = 1;
+                $searchTerms = $this->search->searchArray;
+            }
 
-                foreach ($this->search->searchArray as $term) {
-                    if ($i > $maxWords) {
-                        break;
-                    }
-
-                    $term = $wildcard . $term . $wildcard;
-                    foreach ($docFields as $field) {
-                        $whereArray[] = array($field . ':LIKE', $term, xPDOQuery::SQL_OR, $whereGroup);
-                    }
-
-                    if ($includeTVs) {
-                        $whereArray[] = array('TemplateVarResources.value:LIKE', $term, xPDOQuery::SQL_OR, $whereGroup);
-                        if (!empty($includeTVList)) {
-                            $whereArray[] = array('TemplateVarResources.tmplvarid:IN', $includedTVIds, xPDOQuery::SQL_AND, $whereGroup);
-                        }
-                    }
-
-                    if (is_array($customPackages) && !empty($customPackages)) {
-                        foreach ($customPackages as $package) {
-                            $fields = explode(',', $package[1]);
-                            foreach ($fields as $field) {
-                                $whereArray[] = array($package[0] . '.' . $field . ':LIKE', $term, xPDOQuery::SQL_OR, $whereGroup);
-                            }
-                        }
-                    }
-
-                    if ($andTerms) {
-                        $whereGroup++;
-                    }
-
-                    $i++;
+            foreach ($searchTerms as $term) {
+                if ($i > $maxWords) {
+                    break;
                 }
-            } else {
-                $term = $wildcard . $this->searchString . $wildcard;
+
+                $whereArrayKeys = [];
+                $whereArrayValues = [];
+                $term = $wildcard . $term . $wildcard;
+
                 foreach ($docFields as $field) {
-                    $whereArray[] = array($field.':LIKE', $term,xPDOQuery::SQL_OR, $whereGroup);
+                    $whereArrayKeys[] = 'OR:' . $field . ':LIKE';
+                    $whereArrayValues[] = $term;
                 }
+
                 if ($includeTVs) {
-                    $whereArray[] = array('TemplateVarResources.value:LIKE', $term, xPDOQuery::SQL_OR, $whereGroup);
+                    $whereArrayKeys[] = 'OR:TemplateVarResources.value:LIKE';
+                    $whereArrayValues[] = $term;
                     if (!empty($includeTVList)) {
-                        $whereArray[] = array('TemplateVarResources.tmplvarid:IN', $includedTVIds, xPDOQuery::SQL_AND, $whereGroup);
+                        $whereArrayKeys[] = 'AND:TemplateVarResources.tmplvarid:IN';
+                        $whereArrayValues[] = $includedTVIds;
                     }
                 }
+
                 if (is_array($customPackages) && !empty($customPackages)) {
                     foreach ($customPackages as $package) {
                         $fields = explode(',', $package[1]);
-
                         foreach ($fields as $field) {
-                            $whereArray[] = array($package[0] . '.' . $field . ':LIKE', $term, xPDOQuery::SQL_OR, $whereGroup);
+                            $classAlias = $this->modx->getAlias($package[0]);
+                            $whereArrayKeys[] = 'OR:' . $classAlias . '.' . $field . ':LIKE';
+                            $whereArrayValues[] = $term;
                         }
                     }
                 }
-            }
 
-            $prevWhereGrp = 0;
-            foreach ($whereArray as $clause) {
-                // The following works, but i consider it a hack, and should be fixed. -oori
-                $c->where(array($clause[0] => $clause[1]), $clause[2] , null, $clause[3]);
-
-                if ($clause[3] > $prevWhereGrp) {
-                    $c->andCondition(array('AND:id:!=' => ''), null, $prevWhereGrp);
-                } // hack xpdo to prefix the whole thing with AND
-
-                $prevWhereGrp = $clause[3];
-                if ($andTerms) {
-                    $whereGroup++;
+                if (count($whereArrayKeys) > 0) {
+                    if ($andTerms) {
+                        $whereArrayKeys[0] = preg_replace('/^OR:/', '', $whereArrayKeys[0]);
+                    }
+                    $whereArray[] = array_combine($whereArrayKeys, $whereArrayValues);
                 }
+
+                $i++;
             }
 
-            $c->andCondition(array('AND:id:!=' => ''), null, $whereGroup - 1); // xpdo hack: pad last condition...
+            $c->where($whereArray);
         } else {
-            $fields = $this->modx->getSelectColumns('modResource', '', '', $docFields);
+            $fields = $this->modx->getSelectColumns(modResource::class, '', '', $docFields);
             if (is_array($customPackages) && !empty($customPackages)) {
                 foreach ($customPackages as $package) {
-                    $fields .= (!empty($fields) ? ',' : '') . $this->modx->getSelectColumns($package[0], $package[0], '', explode(',', $package[1]));
+                    $classAlias = $this->modx->getAlias($package[0]);
+                    $fields .= (!empty($fields) ? ',' : '') . $this->modx->getSelectColumns($package[0], $classAlias, '', explode(',', $package[1]));
                     if (!empty($package[4])) {
                         $c->where($package[4]);
                     }
@@ -209,7 +194,7 @@ class SimpleSearchDriverBasic extends SimpleSearchDriver
                     $i++;
                 }
             } else {
-                $relevancyTerms[] = $this->modx->quote($string.$wildcard);
+                $relevancyTerms[] = $this->modx->quote($string . $wildcard);
             }
 
             $this->addRelevancyCondition($c,
@@ -220,13 +205,13 @@ class SimpleSearchDriverBasic extends SimpleSearchDriver
                 )
             );
         }
+
         if (!empty($ids)) {
             $idType = $this->modx->getOption('idType', $this->config, 'parents');
             $depth  = $this->modx->getOption('depth', $this->config, 10);
             $ids    = $this->processIds($ids, $idType, $depth);
             if (!empty($exclude)) {
                 $exclude = $this->cleanIds($exclude);
-                $f       = $this->modx->getSelectColumns('modResource', 'modResource', '', array('id'));
                 /* No need to build 'NOT IN' array because we will remove these from the 'IN' array */
                 /* $c->where(array("{$f}:NOT IN" => explode(',', $exclude)),xPDOQuery::SQL_AND,null,2); */
 
@@ -235,19 +220,20 @@ class SimpleSearchDriverBasic extends SimpleSearchDriver
 
             $f = $this->modx->getSelectColumns(modResource::class, 'modResource', '', array('id'));
 
-            $c->where(array("$f:IN" => $ids), xPDOQuery::SQL_AND, null, $whereGroup);
+            $c->where(["$f:IN" => $ids]);
         }
 
-        $c->where(array('published:=' => 1), xPDOQuery::SQL_AND, null, $whereGroup);
-        $c->where(array('searchable:=' => 1), xPDOQuery::SQL_AND, null, $whereGroup);
-        $c->where(array('deleted:=' => 0), xPDOQuery::SQL_AND, null, $whereGroup);
+        $c->where(['published:=' => 1]);
+        $c->where(['searchable:=' => 1]);
+        $c->where(['deleted:=' => 0]);
 
         /* Restrict to either this context or specified contexts */
         $ctx = !empty($this->config['contexts']) ? $this->config['contexts'] : $this->modx->context->get('key');
         $f   = $this->modx->getSelectColumns(modResource::class, 'modResource','', array('context_key'));
-        $c->where(array("$f:IN" => explode(',', $ctx)), xPDOQuery::SQL_AND, null, $whereGroup);
+        $c->where(["$f:IN" => explode(',', $ctx)]);
+
         if ($hideMenu !== 2) {
-            $c->where(array('hidemenu' => $hideMenu === 1));
+            $c->where(['hidemenu' => $hideMenu === 1]);
         }
 
         $total = $this->modx->getCount(modResource::class, $c);
