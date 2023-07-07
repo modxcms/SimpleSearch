@@ -5,6 +5,7 @@ namespace SimpleSearch;
 use MODX\Revolution\modX;
 use MODX\Revolution\modChunk;
 use MODX\Revolution\Services\ContainerException;
+use MODX\Revolution\Services\NotFoundException;
 use SimpleSearch\Driver\SimpleSearchDriver;
 use SimpleSearch\Driver\SimpleSearchDriverBasic;
 
@@ -55,7 +56,7 @@ class SimpleSearch
             if ($pdo = $this->modx->services->get('pdotools')) {
                 return $pdo->getChunk($name, $properties);
             }
-        } catch (ContainerException $e) {
+        } catch (ContainerException | NotFoundException $e) {
             if (class_exists('pdoTools') && $pdo = $this->modx->getService('pdoTools')) {
                 return $pdo->getChunk($name, $properties);
             }
