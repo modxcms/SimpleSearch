@@ -1,5 +1,9 @@
 Changelog for SimpleSearch.
 
+SimpleSearch 3.0.0
+========================================================================
+- Added support for MODX3
+
 SimpleSearch 2.1.2
 ========================================================================
 - Show facet results when default has none.
