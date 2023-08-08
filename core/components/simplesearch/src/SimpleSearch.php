@@ -406,7 +406,7 @@ class SimpleSearch
                         $pos_end = min(mb_strpos($text, ' ', $l, $encoding), mb_strpos($text, '.', $l, $encoding));
                     }
                 }
-                
+
                 $pos_end = $pos_end - $pos_start;
                 if ($pos_end) {
                     $extract = rtrim(mb_substr($text, 0, $pos_end, $encoding), $trimChars) . $ellipsis;
@@ -444,7 +444,7 @@ class SimpleSearch
                     }
                 }
                 $pos_end = $pos_end - $pos_start;
-                
+
                 if (!$pos_end || $pos_end <= 0) {
                     $extract = $ellipsis . ltrim(substr($text, $pos_start), $trimChars);
                 } else {
@@ -486,10 +486,10 @@ class SimpleSearch
      * Either return a value or set to placeholder, depending on setting
      *
      * @param string $output
-     * @param bool $toPlaceholder
+     * @param string $toPlaceholder
      * @return string
      */
-    public function output(string $output = '', bool $toPlaceholder = false): string
+    public function output(string $output = '', string $toPlaceholder = ''): string
     {
         if (!empty($toPlaceholder)) {
             $this->modx->setPlaceholder($toPlaceholder, $output);
