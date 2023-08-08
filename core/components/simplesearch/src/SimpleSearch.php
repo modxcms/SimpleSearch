@@ -320,7 +320,7 @@ class SimpleSearch
      * @param string $text The text to sanitize
      * @return string The sanitized text
      */
-    public function sanitize(string $text): string
+    public function sanitize(?string $text): string
     {
         $text = strip_tags($text);
         $text = preg_replace('/(\[\[\+.*?]])/', '', $text);
@@ -337,7 +337,7 @@ class SimpleSearch
      * @param string $ellipsis The ellipsis to use to wrap around the extract.
      * @return string The generated extract.
      */
-    public function createExtract(string $text, int $length = 200, string $search = '', string $ellipsis = '...'): string
+    public function createExtract(?string $text, int $length = 200, string $search = '', string $ellipsis = '...'): string
     {
         $text = trim(preg_replace('/\s+/u', ' ', $this->sanitize($text)));
         if (empty($text)) {
@@ -406,7 +406,7 @@ class SimpleSearch
                         $pos_end = min(mb_strpos($text, ' ', $l, $encoding), mb_strpos($text, '.', $l, $encoding));
                     }
                 }
-                
+
                 $pos_end = $pos_end - $pos_start;
                 if ($pos_end) {
                     $extract = rtrim(mb_substr($text, 0, $pos_end, $encoding), $trimChars) . $ellipsis;
@@ -444,7 +444,7 @@ class SimpleSearch
                     }
                 }
                 $pos_end = $pos_end - $pos_start;
-                
+
                 if (!$pos_end || $pos_end <= 0) {
                     $extract = $ellipsis . ltrim(substr($text, $pos_start), $trimChars);
                 } else {
