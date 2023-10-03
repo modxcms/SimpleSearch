@@ -85,13 +85,15 @@ if (!empty($response['results'])) {
                 $text = $modx->runSnippet($extractSource, $resourceArray);
             }
 
-            $extract = $search->createExtract($text, $extractLength, $extract,$extractEllipsis);
-
-            /* Cleanup extract */
-            $extract = strip_tags(preg_replace("#\<!--(.*?)--\>#si", '', $extract));
-            $extract = preg_replace("#\[\[(.*?)\]\]#si", '', $extract);
-            $extract = str_replace(array('[[',']]'), '', $extract);
-            $resourceArray['extract'] = !empty($highlightResults) ? $search->addHighlighting($extract, $highlightClass, $highlightTag) : $extract;
+            if (isset($text) && is_string($text)) {
+                $extract = $search->createExtract($text, $extractLength, $extract,$extractEllipsis);
+    
+                /* Cleanup extract */
+                $extract = strip_tags(preg_replace("#\<!--(.*?)--\>#si", '', $extract));
+                $extract = preg_replace("#\[\[(.*?)\]\]#si", '', $extract);
+                $extract = str_replace(array('[[',']]'), '', $extract);
+                $resourceArray['extract'] = !empty($highlightResults) ? $search->addHighlighting($extract, $highlightClass, $highlightTag) : $extract;                
+            }
         }
 
         $resultsTpl['default']['results'][] = $search->getChunk($tpl, $resourceArray);
