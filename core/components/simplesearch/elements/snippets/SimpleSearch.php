@@ -12,7 +12,7 @@ $search = new SimpleSearch($modx, $scriptProperties);
 
 /* Find search index and toplaceholder setting */
 $searchIndex   = $modx->getOption('searchIndex', $scriptProperties, 'search');
-$toPlaceholder = $modx->getOption('toPlaceholder', $scriptProperties, false);
+$toPlaceholder = $modx->getOption('toPlaceholder', $scriptProperties, '');
 $noResultsTpl  = $modx->getOption('noResultsTpl', $scriptProperties, 'SearchNoResults');
 
 /* Get search string */

@@ -15,7 +15,7 @@ $scriptProperties = array_merge(
         'tpl'           => 'SearchForm',
         'method'        => 'get',
         'searchIndex'   => 'search',
-        'toPlaceholder' => false,
+        'toPlaceholder' => '',
         'landing'       => $modx->resource->get('id'),
 ), $scriptProperties);
 
