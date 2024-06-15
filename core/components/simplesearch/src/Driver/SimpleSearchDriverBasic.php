@@ -221,6 +221,10 @@ class SimpleSearchDriverBasic extends SimpleSearchDriver
             $f = $this->modx->getSelectColumns(modResource::class, 'modResource', '', array('id'));
 
             $c->where(["$f:IN" => $ids]);
+        } elseif (!empty($exclude)) {
+            $exclude = $this->cleanIds($exclude);
+            $f = $this->modx->getSelectColumns(modResource::class, 'modResource', '', ['id']);
+            $c->where(["{$f}:NOT IN" => explode(',', $exclude)]);
         }
 
         $c->where(['published:=' => 1]);
