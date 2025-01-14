@@ -51,6 +51,7 @@ class SimpleSearchDriverBasic extends SimpleSearchDriver
         $andTerms      = $this->modx->getOption('andTerms', $scriptProperties, true);
         $matchWildcard = $this->modx->getOption('matchWildcard', $scriptProperties, true);
         $docFields     = explode(',', $this->modx->getOption('docFields', $scriptProperties, 'pagetitle,longtitle,alias,description,introtext,content'));
+        $templates     = $this->modx->getOption('templates', $scriptProperties, '');
         $includeTVs    = $this->modx->getOption('includeTVs', $scriptProperties, false);
         $includeTVList = $this->modx->getOption('includeTVList', $scriptProperties, '');
         $includedTVIds = array();
@@ -240,6 +241,20 @@ class SimpleSearchDriverBasic extends SimpleSearchDriver
             $c->where(['hidemenu' => $hideMenu === 1]);
         }
 
+        if (!empty($templates)) {
+            $notAllowedTemplates = [];
+            $allowedTemplates    = [];
+            $this->parseTemplatesParam($templates, $notAllowedTemplates, $allowedTemplates);
+
+            if (count($notAllowedTemplates) > 0) {
+                $c->where(['template:NOT IN' => $notAllowedTemplates]);
+            }
+
+            if (count($allowedTemplates) > 0) {
+                $c->where(['template:IN' => $allowedTemplates]);
+            }
+        }
+        
         $total = $this->modx->getCount(modResource::class, $c);
 
         $c->query['distinct'] = 'DISTINCT';
@@ -304,6 +319,27 @@ class SimpleSearchDriverBasic extends SimpleSearchDriver
         );
     }
 
+    /**
+     * Parse templates parameter and set allowed and non-allowed templates as arrays.
+     *
+     * @param $templates
+     * @param $notAllowedTemplates
+     * @param $allowedTemplates
+     */
+    protected function parseTemplatesParam($templates, &$notAllowedTemplates, &$allowedTemplates)
+    {
+        $templates = explode(',', $templates);
+        foreach ($templates as $template) {
+            $template = trim($template, ' ');
+            $char     = substr($template, 0, 1);
+            if ($char === '-') {
+                $notAllowedTemplates[] = trim($template, '-');
+            } else {
+                $allowedTemplates[] = $template;
+            }
+        }
+    }
+    
     /**
      * add relevancy search criteria to query
      *
