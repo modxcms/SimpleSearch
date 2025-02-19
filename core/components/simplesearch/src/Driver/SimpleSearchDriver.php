@@ -167,12 +167,26 @@ abstract class SimpleSearchDriver
             return [];
         }
 
+        $ctx = !empty($this->config['contexts']) ? $this->config['contexts'] : '';
+        $ctx = $this->cleanIds($ctx);
+        $ctxArray = !empty($ctx) ? explode(',', $ctx) : [];
+
         $ids = $this->cleanIds($ids);
         $idArray = explode(',', $ids);
         if ($type === 'parents') {
 
             foreach ($idArray as $id) {
-                $idArray = array_merge($idArray, $this->modx->getChildIds($id, $depth));
+                if (count($ctxArray) > 0){
+                    foreach ($ctxArray as $ctx) {
+                        $child_ids = $this->modx->getChildIds($id, $depth, ['context' => $ctx]);
+                        if (count($child_ids) > 0){
+                            $idArray = array_merge($idArray, $child_ids);
+                            break;
+                        }
+                    }     
+                } else {
+                    $idArray = array_merge($idArray, $this->modx->getChildIds($id, $depth));
+                }                
             }
 
             $idArray = array_unique($idArray);
