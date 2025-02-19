@@ -5,7 +5,7 @@ description: >-
   Evolution (minus the ajax). Only searches Resources; does not search dynamic
   content.
 author: modxcms
-version: 3.0.0-pl
+version: 3.1.0-pl
 chunks:
   - name: SearchForm
     file: searchform.chunk.tpl
@@ -295,6 +295,8 @@ systemSettings:
     value: simpleSearchAutoSuggestions
     area: Autosuggest
 build:
-  scriptsAfter: [resolve.fixsystemsettings.php]
+  scriptsAfter:
+    - resolve.fixsystemsettings.php
+    - resolve.removeindexer.php
   requires:
       modx: '>=3.0.0-alpha'

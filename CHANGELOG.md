@@ -145,15 +145,15 @@ SimpleSearch 1.2.0
 SimpleSearch 1.1.2
 ========================================================================
 - Added the urlScheme parameter which allows you to control the URL scheme used
-for the pagination links.
+  for the pagination links.
 - Made the result extracts to never break words. This means that the extract
-limit is a soft limit now, and results look much nicer.
+  limit is a soft limit now, and results look much nicer.
 - Added the query placeholder to the containerTpl chunk.
 - Fixed the default value of the landing parameter for the SimpleSearchForm
-snippet.
+  snippet.
 - Fixed an URL decoding bug.
 - Removed defaults from the provided chunk templates, as they duplicate code
-from the snippets.
+  from the snippets.
 - Made minor performance improvements.
 
 SimpleSearch 1.1.1
