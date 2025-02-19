@@ -258,10 +258,31 @@ class SimpleSearchDriverBasic extends SimpleSearchDriver
         $total = $this->modx->getCount(modResource::class, $c);
 
         $c->query['distinct'] = 'DISTINCT';
-        if (!empty($scriptProperties['sortBy'])) {
+
+        $perPage = (int) $this->modx->getOption('perPage', $this->config, 10);
+        $offset = $this->modx->getOption('start', $this->config, 0);
+        $offsetIndex = $this->modx->getOption('offsetIndex', $this->config, 'simplesearch_offset');
+        if (isset($_REQUEST[$offsetIndex])) {
+            $offset = (int) $_REQUEST[$offsetIndex];
+        }
+
+        $sortBy = $this->modx->getOption('sortBy', $scriptProperties, '');
+        $maxCountPhpSort = (int) $this->modx->getOption('maxCountPhpSort', $scriptProperties, 0);
+        if (empty($sortBy) && $maxCountPhpSort && $total > $maxCountPhpSort){
+            // Too many results to sort in PHP -> Use limit in SQL-Query
+            $fallbackSortBy = $this->modx->getOption('fallbackSortBy', $scriptProperties, '');
+            if ($fallbackSortBy) {
+                $sortBy = $fallbackSortBy;
+            } else {
+                $sortBy = 'id';
+            }
+        }
+
+        if (!empty($sortBy)) {
+            // sort and limit resources with SQL
             $sortDir  = $this->modx->getOption('sortDir', $scriptProperties, 'DESC');
             $sortDirs = explode(',', $sortDir);
-            $sortBys  = explode(',', $scriptProperties['sortBy']);
+            $sortBys  = explode(',', $sortBy);
             $dir      = 'desc';
             for ($i = 0, $iMax = count($sortBys); $i < $iMax; $i++) {
                 if (isset($sortDirs[$i])) {
@@ -270,24 +291,19 @@ class SimpleSearchDriverBasic extends SimpleSearchDriver
 
                 $c->sortby('modResource.' . $sortBys[$i], strtoupper($dir));
             }
+            if ($perPage > 0) {
+                $c->limit($perPage, $offset);
+            }
         }
 
         $resources = $this->modx->getCollection(modResource::class, $c);
-        if (empty($scriptProperties['sortBy'])) {
+
+        if (empty($sortBy)) {
+            // sort and limit resources in PHP
             $resources = $this->sortResults($resources, $scriptProperties);
-        }
-
-        /* Set limit */
-        $perPage = (int) $this->modx->getOption('perPage', $this->config, 10);
-        if ($perPage > 0) {
-            $offset      = $this->modx->getOption('start', $this->config, 0);
-            $offsetIndex = $this->modx->getOption('offsetIndex', $this->config, 'simplesearch_offset');
-
-            if (isset($_REQUEST[$offsetIndex])) {
-                $offset = (int) $_REQUEST[$offsetIndex];
+            if ($perPage > 0) {
+                $resources = array_slice($resources, $offset, $perPage);
             }
-
-            $resources = array_slice($resources, $offset, $perPage);
         }
 
         $includeTVs = $this->modx->getOption('includeTVs', $scriptProperties, '');
