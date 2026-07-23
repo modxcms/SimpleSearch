@@ -1,5 +1,9 @@
 Changelog for SimpleSearch.
 
+SimpleSearch 3.1.1
+========================================================================
+- Fix fatal error on strpos
+
 SimpleSearch 3.1.0
 ========================================================================
 - Fix toPlaceholder property
