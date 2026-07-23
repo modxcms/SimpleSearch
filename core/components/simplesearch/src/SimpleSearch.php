@@ -451,7 +451,7 @@ class SimpleSearch
                     $extract = $ellipsis . trim(substr($text, $pos_start, $pos_end), $trimChars) . $ellipsis;
                 }
             } else {
-                $pos_end = (strlen($text) <= $length) ?
+                $pos_end = (strlen($text) >= $length) ?
                     min(strpos($text, ' ', $length - 1), strpos($text, '.', $length - 1))
                     : 0;
                 if ($pos_end) {
