@@ -5,7 +5,7 @@ description: >-
   Evolution (minus the ajax). Only searches Resources; does not search dynamic
   content.
 author: modxcms
-version: 3.1.0-pl
+version: 3.1.1-pl
 chunks:
   - name: SearchForm
     file: searchform.chunk.tpl
